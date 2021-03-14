@@ -16,6 +16,7 @@ PLAYER_FIELDS_NEEDED = [
 ]
 class Player:
     def __init__(self, pid):
+        self.isexpired = False
         self.pid = pid
         self.p_name = ""
         self.p_loc = ""
@@ -51,26 +52,33 @@ class Player:
     def addPlayerFromURL(self):
         page_response = requests.get(DEFAULT_URI % self.pid).text
         soup = BeautifulSoup(page_response, 'html.parser')
+        res = soup.findAll(text='Expired')
+        print(res)
+        if res != []:
+            print("Returning")
+            self.isexpired = True
+            return
+
         self.p_name = soup.find('meta', property="og:title").get('content').split('#')[0].strip()
         details = soup.find('ul', {'class': 'player-info'})
         self.p_loc = details.find('li', {'class': 'location'}).find('a').text
         pdet = []
-        if not self.checkForExpiredPDGA(details):
-            #TODO: This needs to be refactored similarly to 'checkForExpiredPDGA' where we iterate through the needed tags instgead of all of this mumbo jumbo
-            for li in details.findAll('li')[1:]:
-                classType = li.get('class')
-                if classType is not None:
-                    #rip the string out of the list
-                    cClass = classType[0]
+        #TODO: This needs to be refactored similarly to 'checkForExpiredPDGA' where we iterate through the needed tags instgead of all of this mumbo jumbo
+        print("Scraping")
+        for li in details.findAll('li')[1:]:
+            classType = li.get('class')
+            if classType is not None:
+                #rip the string out of the list
+                cClass = classType[0]
 
-                if cClass in PLAYER_FIELDS_NEEDED:
-                    content = li.text.split(':')[1]
-                    if '(' in content:
-                        content = content.split()[0]
+            if cClass in PLAYER_FIELDS_NEEDED:
+                content = li.text.split(':')[1]
+                if '(' in content:
+                    content = content.split()[0]
 
-                    pdet.append(content.strip()) 
+                pdet.append(content.strip()) 
 
-            self.updatePlayer(pdet)
+        self.updatePlayer(pdet)
 
     def printPlayerDetails(self):
         print("Player Name: %s" % self.p_name)
@@ -87,15 +95,7 @@ class Player:
     def addPlayerToDB(self):
         insertPlayer(self.pid, self.p_name, self.p_loc, self.p_class, self.p_memsince, self.p_rating, self.p_numevents, self.p_earnings)
 
-    def checkForExpiredPDGA(self, details):
-        status = details.find('li', {'class': 'membership-status'})
-        if 'Expired' in status.text:
-            return True
-        else:
-            return False
-        
-
-
+    
                         
 
 class Round:

@@ -1,15 +1,18 @@
 #!/usr/bin/python3
 from parser import * 
 from time import sleep
+from random import uniform
 def main():
-    playernums = [77387, 113942, 121293, 113966, 126851, 63765]
-    for num in playernums:
+    for num in range(69052, 69500):
         player = Player(num)
+        print("Starting Scraping for Player: %s" % str(num))
         player.addPlayerFromURL()
-        player.addRoundsFromURL()
-        player.printPlayerDetails()
-        player.addPlayerToDB()
-        sleep(1)
+        if not player.isexpired:
+            print("Player has current PDGA")
+            player.addRoundsFromURL()
+            player.addPlayerToDB()
+            player.printPlayerDetails()
+        sleep(uniform(1,3))
 
 
 
