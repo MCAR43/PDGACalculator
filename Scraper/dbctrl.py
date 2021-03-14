@@ -11,3 +11,9 @@ def insertPlayer(puid, pname, ploc="", pclass="", pmemsince="", prating=0, pnume
     session.add(tempPlayerObject)
     session.commit()
 
+
+def insertRound(rtuid, rrndnum, rpuid, rname, rtier, rdate, rscore, rrating, reval, rincl):
+    tempRoundObject=RoundDB(rtuid=rtuid, rrndnum=rrndnum, rpuid=rpuid, rname=rname, rtier=rtier, rdate=rdate, rscore=rscore,
+                              rrating=rrating, reval=reval, rincl=rincl)
+    session.add(tempRoundObject)
+    session.commit()

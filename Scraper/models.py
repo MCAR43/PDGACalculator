@@ -20,7 +20,7 @@ class RoundDB(Base):
     __tablename__ = "ROUND"
     rtuid = Column(Integer, primary_key = True)
     rrndnum = Column(Integer, primary_key = True)
-    rpuid = Column(Integer, ForeignKey('PLAYER.puid'))
+    rpuid = Column(Integer, primary_key = True)
     rname = Column(String(50), nullable=True)
     rtier = Column(String(50), nullable=True)
     rdate = Column(String(50), nullable=True)
@@ -28,7 +28,7 @@ class RoundDB(Base):
     rrating = Column(Integer, nullable=False)
     reval = Column(Integer, nullable=False)
     rincl = Column(Integer, nullable=False)
-    player = relationship(PlayerDB)
+    #player = relationship(PlayerDB)
 
 engine = create_engine('sqlite:///temp.db')
 Base.metadata.create_all(engine)

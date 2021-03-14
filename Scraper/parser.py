@@ -3,9 +3,17 @@ import requests
 from bs4 import BeautifulSoup
 from collections import defaultdict 
 from os import get_terminal_size
-from dbctrl import insertPlayer
+from dbctrl import insertPlayer, insertRound
 DETAILS_URI = "https://www.pdga.com/player/%s/details"
 DEFAULT_URI = "https://www.pdga.com/player/%s"
+PLAYER_FIELDS_NEEDED = [
+    "location",
+    "classification",
+    "join-date",
+    "current-rating",
+    "career-wins",
+    "career-earnings"
+]
 class Player:
     def __init__(self, pid):
         self.pid = pid
@@ -19,44 +27,50 @@ class Player:
         self.p_rounds = [] 
 
     def updatePlayer(self, details):
-        if len(details) == 7:
-            self.p_class, self.p_memsince, _, self.p_rating, self.p_numevents, _, self.p_earnings = details 
+        if len(details) == 5:
+            self.p_class, self.p_memsince, self.p_rating, self.p_numevents,self.p_earnings = details 
     
     def addRoundsFromURL(self):
-        #page_response = requests.get(DETAILS_URI % self.pid).text
-        with open('data/eric_data.html', 'r') as fp:
-            soup = BeautifulSoup(fp, 'html.parser')
-            playernumber = soup.find('meta', property="og:url").get('content')[::-1].split('/')[1]
-            table = soup.find('table', id="player-results-details")
-            for row in table.findAll('tr'):
-                currounddetails = [playernumber]
-                for elem in row.findAll('td'):
-                    if elem.find('a') != None:
-                        tuid = elem.find('a').get('href')[::-1].split('/')[0]
-                        currounddetails.append(tuid)
-                        currounddetails.append(elem.text)
-                    else:
-                        val = elem.text
-                        currounddetails.append(val)
-                    
-                self.p_rounds.append(Round(currounddetails))
+        page_response = requests.get(DETAILS_URI % self.pid).text
+        soup = BeautifulSoup(page_response, 'html.parser')
+        playernumber = soup.find('meta', property="og:url").get('content')[::-1].split('/')[1]
+        table = soup.find('table', id="player-results-details")
+        for row in table.findAll('tr'):
+            currounddetails = [playernumber]
+            for elem in row.findAll('td'):
+                if elem.find('a') != None:
+                    tuid = elem.find('a').get('href')[::-1].split('/')[0]
+                    currounddetails.append(tuid)
+                    currounddetails.append(elem.text)
+                else:
+                    val = elem.text
+                    currounddetails.append(val)
+                
+            self.p_rounds.append(Round(currounddetails))
 
     def addPlayerFromURL(self):
-        #page_response = requests.get(DEFAULT_URI % self.pid).text
-        with open('data/eric.html', 'r') as fp:
-            soup = BeautifulSoup(fp, 'html.parser')
-            self.p_name = soup.find('meta', property="og:title").get('content').split('#')[0].strip()
-            details = soup.find('ul', {'class': 'player-info'})
-            self.p_loc = details.find('li', {'class': 'location'}).find('a').text
-            pdet = []
+        page_response = requests.get(DEFAULT_URI % self.pid).text
+        soup = BeautifulSoup(page_response, 'html.parser')
+        self.p_name = soup.find('meta', property="og:title").get('content').split('#')[0].strip()
+        details = soup.find('ul', {'class': 'player-info'})
+        self.p_loc = details.find('li', {'class': 'location'}).find('a').text
+        pdet = []
+        if not self.checkForExpiredPDGA(details):
+            #TODO: This needs to be refactored similarly to 'checkForExpiredPDGA' where we iterate through the needed tags instgead of all of this mumbo jumbo
             for li in details.findAll('li')[1:]:
-                content = li.text.split(':')[1]
-                if '(' in content:
-                    content = content.split()[0]
+                classType = li.get('class')
+                if classType is not None:
+                    #rip the string out of the list
+                    cClass = classType[0]
 
-                pdet.append(content.strip()) 
+                if cClass in PLAYER_FIELDS_NEEDED:
+                    content = li.text.split(':')[1]
+                    if '(' in content:
+                        content = content.split()[0]
 
-            self.updatePlayer(pdet[0:len(pdet) - 1])
+                    pdet.append(content.strip()) 
+
+            self.updatePlayer(pdet)
 
     def printPlayerDetails(self):
         print("Player Name: %s" % self.p_name)
@@ -72,6 +86,15 @@ class Player:
 
     def addPlayerToDB(self):
         insertPlayer(self.pid, self.p_name, self.p_loc, self.p_class, self.p_memsince, self.p_rating, self.p_numevents, self.p_earnings)
+
+    def checkForExpiredPDGA(self, details):
+        status = details.find('li', {'class': 'membership-status'})
+        if 'Expired' in status.text:
+            return True
+        else:
+            return False
+        
+
 
                         
 
@@ -92,7 +115,7 @@ class Round:
         #we know the order so we can jsut do this
         if len(details) == 10:
             self.puid, self.ruid, self.rname, self.tier, self.date, self.round, self.score, self.rrating, self.eval, self.incl = details
-            self.printRound()
+            self.addRoundToDB()
     
     def printRound(self):
         #TODO: Print Prettier Later
@@ -109,6 +132,9 @@ class Round:
         print("# Round Evaluated: %s" % self.eval)
         print("# Round Included: %s" % self.incl)
         print("#" * numCol)
+
+    def addRoundToDB(self):
+        insertRound(self.ruid, self.round, self.puid, self.rname, self.tier, self.date, self.score, self.rrating, self.eval, self.incl)
   
 
 
