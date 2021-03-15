@@ -6,14 +6,8 @@ from os import get_terminal_size
 from dbctrl import insertPlayer, insertRound
 DETAILS_URI = "https://www.pdga.com/player/%s/details"
 DEFAULT_URI = "https://www.pdga.com/player/%s"
-PLAYER_FIELDS_NEEDED = [
-    "location",
-    "classification",
-    "join-date",
-    "current-rating",
-    "career-wins",
-    "career-earnings"
-]
+
+
 class Player:
     def __init__(self, pid):
         self.isexpired = False
@@ -23,15 +17,12 @@ class Player:
         self.p_class = ""
         self.p_memsince = ""
         self.p_rating = ""
+        self.p_numwins = ""
         self.p_numevents = ""
         self.p_earnings = ""
         self.p_rounds = [] 
 
-    def updatePlayer(self, details):
-        if len(details) == 5:
-            self.p_class, self.p_memsince, self.p_rating, self.p_numevents,self.p_earnings = details 
-    
-    def addRoundsFromURL(self):
+    def emaddRoundsFromURL(self):
         page_response = requests.get(DETAILS_URI % self.pid).text
         soup = BeautifulSoup(page_response, 'html.parser')
         playernumber = soup.find('meta', property="og:url").get('content')[::-1].split('/')[1]
@@ -49,36 +40,88 @@ class Player:
                 
             self.p_rounds.append(Round(currounddetails))
 
+
+    
+    
+    # -------------------------------------------------------------------------------------------------------
+    # PRE: 
+    #   * This function should only ever be called AFTER Player#addPlayerFromURL has been called
+    #   * Will return if certain fields are not defined previously (indicating that the above was not filled)
+    #
+    # DEF:
+    #   * Will fill later
+    # -------------------------------------------------------------------------------------------------------
+    def addRoundsFromURL(self):
+        with open('data/eric_data.html', 'r') as fp:
+            soup = BeautifulSoup(fp ,'html.parser')
+            table = soup.find('table', id='player-results-details')
+            for entry in table.findAll('tr')[1:]:
+                #Every tournament ID entry follows the following format
+                # "/tour/event/39523"
+                # to avoid importing re just split by the / and grab the end
+                tournamentID = entry.find('td', {'class': 'tournament'}).find('a').get('href').split('/')[-1]
+                tournamentName = entry.find('a').text
+                tournamentTier = entry.find('td', {'class': 'tier'}).text
+
+                #PDGA is not at all consistent with their formatting for tournament dates, we are only concerned with the end date of the tournament for rating calculations
+                # Our rating calculator will be off by 1-2 days, but I don't think the PDGA even accounts for this
+                # TODO: We need to translate these stupid dates that say 07 aug - 09 aug into N separate dates corresponding to the round numbers so we can get day to day calcs for ratings
+                # TODO: Email the PDGA and tell them how much I despise them
+                tournamentDate = entry.find('td', {'class': 'date'}).text
+                if ' ' in tournamentDate:
+                    tournamentDate = tournamentDate.split(' ')[-1]
+
+                tournamentRoundNum = entry.find('td', {'class': 'round'}).text
+                tournamentScore = entry.find('td', {'class': 'score'}).text
+                tournamentRoundRating = entry.find('td', {'class': 'round-rating'}).text
+                tournamentEval = entry.find('td', {'class': 'evaluated'}).text
+                tournamentIncl = entry.find('td', {'class': 'included'}).text
+                self.p_rounds.append(Round(self.pid, tournamentID, tournamentName, tournamentTier, tournamentDate, tournamentRoundNum, tournamentScore, tournamentRoundRating, tournamentEval, tournamentIncl))
+
+    # -------------------------------------------------------------------------------------------------------
+    # PRE: 
+    #   * do later
+    # DEF:
+    #   * Will fill later
+    # -------------------------------------------------------------------------------------------------------
+
     def addPlayerFromURL(self):
-        page_response = requests.get(DEFAULT_URI % self.pid).text
-        soup = BeautifulSoup(page_response, 'html.parser')
-        res = soup.findAll(text='Expired')
-        print(res)
-        if res != []:
-            print("Returning")
+        #fp = requests.get(DEFAULT_URI % self.pid).text
+        with open('data/eric.html', 'r') as fp:
+            soup = BeautifulSoup(fp ,'html.parser')
+            #Checks for the player being expired or the page not being found and skips parsing
+            if self.isPlayerExpired(soup):
+                return
+
+            details = soup.find('ul', {'class': 'player-info'})
+            self.p_loc = details.find('li', {'class':'location'}).find('a').text
+            self.p_name = soup.find('meta', property="og:title").get('content').split('#')[0].strip()
+            #Most of these fields follows this format for parsing
+            # "JunkText: VALUENEEDED potentiallmorejunkafter
+            # Parsing for VALUENEEDED is done by splitting the text by ':' and selecting the second element in the list then stripping whitespace 
+            self.p_class = details.find('li', {'class':'classification'}).text.split(':')[1].strip()
+            self.p_memsince = details.find('li', {'class', 'join-date'}).text.split(':')[1].strip()
+            self.p_rating = details.find('li', {'class', 'current-rating'}).text.split(':')[1].split()[0]
+            self.p_numwins = details.find('li', {'class', 'career-wins'}).text.split(':')[1].strip()
+            self.p_numevents = details.find('li', {'class', 'career-events'}).text.split(':')[1].strip()
+            self.p_earnings = details.find('li', {'class', 'career-earnings'}).text.split(':')[1].strip()
+
+    # -------------------------------------------------------------------------------------------------------
+    # PRE: 
+    #   * do later
+    # DEF:
+    #   * Will fill later
+    # -------------------------------------------------------------------------------------------------------
+
+    def isPlayerExpired(self, soup):
+        expirySearch = soup.findAll(text='Expired')
+        pageNotFoundErrorSearch = soup.findAll(text='Page not found')
+        if expirySearch != [] or pageNotFoundErrorSearch != []:
             self.isexpired = True
-            return
-
-        self.p_name = soup.find('meta', property="og:title").get('content').split('#')[0].strip()
-        details = soup.find('ul', {'class': 'player-info'})
-        self.p_loc = details.find('li', {'class': 'location'}).find('a').text
-        pdet = []
-        #TODO: This needs to be refactored similarly to 'checkForExpiredPDGA' where we iterate through the needed tags instgead of all of this mumbo jumbo
-        print("Scraping")
-        for li in details.findAll('li')[1:]:
-            classType = li.get('class')
-            if classType is not None:
-                #rip the string out of the list
-                cClass = classType[0]
-
-            if cClass in PLAYER_FIELDS_NEEDED:
-                content = li.text.split(':')[1]
-                if '(' in content:
-                    content = content.split()[0]
-
-                pdet.append(content.strip()) 
-
-        self.updatePlayer(pdet)
+            return True
+        else:
+            self.isexpired = False 
+            return False
 
     def printPlayerDetails(self):
         print("Player Name: %s" % self.p_name)
@@ -94,6 +137,9 @@ class Player:
 
     def addPlayerToDB(self):
         insertPlayer(self.pid, self.p_name, self.p_loc, self.p_class, self.p_memsince, self.p_rating, self.p_numevents, self.p_earnings)
+        if self.p_rounds:
+            for rnd in self.p_rounds:
+                rnd.addRoundToDB()
 
     
                         
@@ -111,11 +157,17 @@ class Round:
         self.eval = 0
         self.incl = 0
 
-    def __init__(self, details):
-        #we know the order so we can jsut do this
-        if len(details) == 10:
-            self.puid, self.ruid, self.rname, self.tier, self.date, self.round, self.score, self.rrating, self.eval, self.incl = details
-            self.addRoundToDB()
+    def __init__(self, pid, tuid, name, tier, date, roundnum, score, rrating, evl, incl):
+        self.puid = pid
+        self.ruid = tuid
+        self.rname = name
+        self.tier = tier
+        self.date = date
+        self.round = roundnum
+        self.score = score
+        self.rrating = rrating
+        self.eval = evl
+        self.incl = incl
     
     def printRound(self):
         #TODO: Print Prettier Later
