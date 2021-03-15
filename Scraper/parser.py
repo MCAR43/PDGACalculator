@@ -7,10 +7,8 @@ from dbctrl import insertPlayer, insertRound
 DETAILS_URI = "https://www.pdga.com/player/%s/details"
 DEFAULT_URI = "https://www.pdga.com/player/%s"
 
-
 class Player:
     def __init__(self, pid):
-        self.isexpired = False
         self.pid = pid
         self.p_name = ""
         self.p_loc = ""
@@ -21,27 +19,7 @@ class Player:
         self.p_numevents = ""
         self.p_earnings = ""
         self.p_rounds = [] 
-
-    def emaddRoundsFromURL(self):
-        page_response = requests.get(DETAILS_URI % self.pid).text
-        soup = BeautifulSoup(page_response, 'html.parser')
-        playernumber = soup.find('meta', property="og:url").get('content')[::-1].split('/')[1]
-        table = soup.find('table', id="player-results-details")
-        for row in table.findAll('tr'):
-            currounddetails = [playernumber]
-            for elem in row.findAll('td'):
-                if elem.find('a') != None:
-                    tuid = elem.find('a').get('href')[::-1].split('/')[0]
-                    currounddetails.append(tuid)
-                    currounddetails.append(elem.text)
-                else:
-                    val = elem.text
-                    currounddetails.append(val)
-                
-            self.p_rounds.append(Round(currounddetails))
-
-
-    
+        self.p_expired = False
     
     # -------------------------------------------------------------------------------------------------------
     # PRE: 
@@ -52,31 +30,31 @@ class Player:
     #   * Will fill later
     # -------------------------------------------------------------------------------------------------------
     def addRoundsFromURL(self):
-        with open('data/eric_data.html', 'r') as fp:
-            soup = BeautifulSoup(fp ,'html.parser')
-            table = soup.find('table', id='player-results-details')
-            for entry in table.findAll('tr')[1:]:
-                #Every tournament ID entry follows the following format
-                # "/tour/event/39523"
-                # to avoid importing re just split by the / and grab the end
-                tournamentID = entry.find('td', {'class': 'tournament'}).find('a').get('href').split('/')[-1]
-                tournamentName = entry.find('a').text
-                tournamentTier = entry.find('td', {'class': 'tier'}).text
+        fp = requests.get(DETAILS_URI % self.pid).text
+        soup = BeautifulSoup(fp ,'html.parser')
+        table = soup.find('table', id='player-results-details')
+        for entry in table.findAll('tr')[1:]:
+            #Every tournament ID entry follows the following format
+            # "/tour/event/39523"
+            # to avoid importing re just split by the / and grab the end
+            tournamentID = entry.find('td', {'class': 'tournament'}).find('a').get('href').split('/')[-1]
+            tournamentName = entry.find('a').text
+            tournamentTier = entry.find('td', {'class': 'tier'}).text
 
-                #PDGA is not at all consistent with their formatting for tournament dates, we are only concerned with the end date of the tournament for rating calculations
-                # Our rating calculator will be off by 1-2 days, but I don't think the PDGA even accounts for this
-                # TODO: We need to translate these stupid dates that say 07 aug - 09 aug into N separate dates corresponding to the round numbers so we can get day to day calcs for ratings
-                # TODO: Email the PDGA and tell them how much I despise them
-                tournamentDate = entry.find('td', {'class': 'date'}).text
-                if ' ' in tournamentDate:
-                    tournamentDate = tournamentDate.split(' ')[-1]
+            #PDGA is not at all consistent with their formatting for tournament dates, we are only concerned with the end date of the tournament for rating calculations
+            # Our rating calculator will be off by 1-2 days, but I don't think the PDGA even accounts for this
+            # TODO: We need to translate these stupid dates that say 07 aug - 09 aug into N separate dates corresponding to the round numbers so we can get day to day calcs for ratings
+            # TODO: Email the PDGA and tell them how much I despise them
+            tournamentDate = entry.find('td', {'class': 'date'}).text
+            if ' ' in tournamentDate:
+                tournamentDate = tournamentDate.split(' ')[-1]
 
-                tournamentRoundNum = entry.find('td', {'class': 'round'}).text
-                tournamentScore = entry.find('td', {'class': 'score'}).text
-                tournamentRoundRating = entry.find('td', {'class': 'round-rating'}).text
-                tournamentEval = entry.find('td', {'class': 'evaluated'}).text
-                tournamentIncl = entry.find('td', {'class': 'included'}).text
-                self.p_rounds.append(Round(self.pid, tournamentID, tournamentName, tournamentTier, tournamentDate, tournamentRoundNum, tournamentScore, tournamentRoundRating, tournamentEval, tournamentIncl))
+            tournamentRoundNum = entry.find('td', {'class': 'round'}).text
+            tournamentScore = entry.find('td', {'class': 'score'}).text
+            tournamentRoundRating = entry.find('td', {'class': 'round-rating'}).text
+            tournamentEval = entry.find('td', {'class': 'evaluated'}).text
+            tournamentIncl = entry.find('td', {'class': 'included'}).text
+            self.p_rounds.append(Round(self.pid, tournamentID, tournamentName, tournamentTier, tournamentDate, tournamentRoundNum, tournamentScore, tournamentRoundRating, tournamentEval, tournamentIncl))
 
     # -------------------------------------------------------------------------------------------------------
     # PRE: 
@@ -86,24 +64,31 @@ class Player:
     # -------------------------------------------------------------------------------------------------------
 
     def addPlayerFromURL(self):
-        #fp = requests.get(DEFAULT_URI % self.pid).text
-        with open('data/eric.html', 'r') as fp:
-            soup = BeautifulSoup(fp ,'html.parser')
-            #Checks for the player being expired or the page not being found and skips parsing
-            if self.isPlayerExpired(soup):
-                return
+        fp = requests.get(DEFAULT_URI % self.pid).text
+        soup = BeautifulSoup(fp ,'html.parser')
+        #Checks for the player being expired or the page not being found and skips parsing
+        if self.isPlayerExpired(soup):
+            self.p_expired = True
+            return
 
-            details = soup.find('ul', {'class': 'player-info'})
-            self.p_loc = details.find('li', {'class':'location'}).find('a').text
-            self.p_name = soup.find('meta', property="og:title").get('content').split('#')[0].strip()
-            #Most of these fields follows this format for parsing
-            # "JunkText: VALUENEEDED potentiallmorejunkafter
-            # Parsing for VALUENEEDED is done by splitting the text by ':' and selecting the second element in the list then stripping whitespace 
-            self.p_class = details.find('li', {'class':'classification'}).text.split(':')[1].strip()
-            self.p_memsince = details.find('li', {'class', 'join-date'}).text.split(':')[1].strip()
-            self.p_rating = details.find('li', {'class', 'current-rating'}).text.split(':')[1].split()[0]
+        details = soup.find('ul', {'class': 'player-info'})
+        self.p_loc = details.find('li', {'class':'location'}).find('a').text
+        self.p_name = soup.find('meta', property="og:title").get('content').split('#')[0].strip()
+        #Most of these fields follows this format for parsing
+        # "JunkText: VALUENEEDED potentiallmorejunkafter
+        # Parsing for VALUENEEDED is done by splitting the text by ':' and selecting the second element in the list then stripping whitespace 
+        self.p_class = details.find('li', {'class':'classification'}).text.split(':')[1].strip()
+        self.p_memsince = details.find('li', {'class', 'join-date'}).text.split(':')[1].strip()
+        self.p_rating = details.find('li', {'class', 'current-rating'}).text.split(':')[1].split()[0]
+
+        #for bad players that have never won an event omegaLUL
+        try:
             self.p_numwins = details.find('li', {'class', 'career-wins'}).text.split(':')[1].strip()
-            self.p_numevents = details.find('li', {'class', 'career-events'}).text.split(':')[1].strip()
+        except AttributeError:
+            self.p_numwins = 0
+
+        self.p_numevents = details.find('li', {'class', 'career-events'}).text.split(':')[1].strip()
+        if self.p_class == "Professional":
             self.p_earnings = details.find('li', {'class', 'career-earnings'}).text.split(':')[1].strip()
 
     # -------------------------------------------------------------------------------------------------------
