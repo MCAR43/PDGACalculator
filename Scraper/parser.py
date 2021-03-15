@@ -33,6 +33,12 @@ class Player:
         fp = requests.get(DETAILS_URI % self.pid).text
         soup = BeautifulSoup(fp ,'html.parser')
         table = soup.find('table', id='player-results-details')
+        #Weird PDGA glitch where they have > 0 events but their is nothing on their round ratings page, this takes care of that 
+        if table is None:
+            return
+
+        print("passed weird glitch")
+    
         for entry in table.findAll('tr')[1:]:
             #Every tournament ID entry follows the following format
             # "/tour/event/39523"
@@ -79,17 +85,25 @@ class Player:
         # Parsing for VALUENEEDED is done by splitting the text by ':' and selecting the second element in the list then stripping whitespace 
         self.p_class = details.find('li', {'class':'classification'}).text.split(':')[1].strip()
         self.p_memsince = details.find('li', {'class', 'join-date'}).text.split(':')[1].strip()
-        self.p_rating = details.find('li', {'class', 'current-rating'}).text.split(':')[1].split()[0]
 
-        #for bad players that have never won an event omegaLUL
+        #The above will be on EVERY single PDGA profile, these may or may not exist.
+        #TODO:This is pretty dumb, should fix later
         try:
             self.p_numwins = details.find('li', {'class', 'career-wins'}).text.split(':')[1].strip()
         except AttributeError:
             self.p_numwins = 0
-
-        self.p_numevents = details.find('li', {'class', 'career-events'}).text.split(':')[1].strip()
-        if self.p_class == "Professional":
+        try:
+            self.p_rating = details.find('li', {'class', 'current-rating'}).text.split(':')[1].split()[0]
+        except AttributeError:
+            self.p_rating = 0
+        try:
+            self.p_numevents = details.find('li', {'class', 'career-events'}).text.split(':')[1].strip()
+        except AttributeError:
+            self.p_numevents = 0
+        try:
             self.p_earnings = details.find('li', {'class', 'career-earnings'}).text.split(':')[1].strip()
+        except AttributeError:
+            self.p_earnings = 0
 
     # -------------------------------------------------------------------------------------------------------
     # PRE: 
@@ -172,63 +186,3 @@ class Round:
 
     def addRoundToDB(self):
         insertRound(self.ruid, self.round, self.puid, self.rname, self.tier, self.date, self.score, self.rrating, self.eval, self.incl)
-  
-
-
-'''
-#ook ook bs4 can't into for eaches on tds
-curRoundDetails = [] 
-for row in table.findAll('tr'):
-    for elem in row.find('td'):
-        if elem.find('a') != None:
-            #ooga booga don't want to import regex
-            tuid = elem.find('a').get('href')[::-1].split('/')[0]
-            print("tuid: %s" % tuid)
-            curRoundDetails.append(tuid)
-        else:
-            val = elem.text
-            curRoundDetails.append(val)
-            print("%s: %s" % (elem.get('class')[0], elem.text))
-
-    print(curRoundDetails)
-
-'''
-
-
-'''
-    def addroundsfromfile(self, filepath):
-        with open(filepath, 'r') as fp:
-            soup = beautifulsoup(fp, 'html.parser')
-            playernumber = soup.find('meta', property="og:url").get('content')[::-1].split('/')[1]
-            table = soup.find('table', id="player-results-details")
-            print(table)
-            for row in table.findall('tr'):
-                currounddetails = [playernumber]
-                for elem in row.findall('td'):
-                    if elem.find('a') != none:
-                        tuid = elem.find('a').get('href')[::-1].split('/')[0]
-                        currounddetails.append(tuid)
-                    else:
-                        val = elem.text
-                        currounddetails.append(val)
-                    
-                round(currounddetails)
-'''
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
